@@ -11,7 +11,7 @@ services:
   kdc:
     build: .
     container_name: kdc_node
-    command: python3 -u kdc.py
+    command: sleep infinity
     networks:
       ki_network:
         ipv4_address: 172.20.0.10
@@ -21,24 +21,17 @@ services:
   bob:
     build: .
     container_name: bob_node
-    command: python3 -u bob.py
+    command: sleep infinity
     networks:
       ki_network:
         ipv4_address: 172.20.0.12
     ports:
       - "8000:8000"
-    depends_on:
-      - kdc
 
   alice:
     build: .
     container_name: alice_node
-    command: python3 -u alice.py
-    stdin_open: true # Keeps stdin open for interactive CLI
-    tty: true        # Allocates pseudo-TTY for input
+    command: sleep infinity
     networks:
       ki_network:
         ipv4_address: 172.20.0.11
-    depends_on:
-      - kdc
-      - bob

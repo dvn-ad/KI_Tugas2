@@ -1,111 +1,245 @@
 import socket
 import threading
+import random
+import select
+import sys
+from aes import aes_encrypt, aes_decrypt
 
-# --- MANUAL AES DECRYPTION ---
-INV_S_BOX = [
-    0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
-    0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
-    0x54, 0x7b, 0x94, 0x32, 0xa6, 0xc2, 0x23, 0x3d, 0xee, 0x4c, 0x95, 0x0b, 0x42, 0xfa, 0xc3, 0x4e,
-    0x08, 0x2e, 0xa1, 0x66, 0x28, 0xd9, 0x24, 0xb2, 0x76, 0x5b, 0xa2, 0x49, 0x6d, 0x8b, 0xd1, 0x25,
-    0x72, 0xf8, 0xf6, 0x64, 0x86, 0x68, 0x98, 0x16, 0xd4, 0xa4, 0x5c, 0xcc, 0x5d, 0x65, 0xb6, 0x92,
-    0x6c, 0x70, 0x48, 0x50, 0xfd, 0xed, 0xb9, 0xda, 0x5e, 0x15, 0x46, 0x57, 0xa7, 0x8d, 0x9d, 0x84,
-    0x90, 0xd8, 0xab, 0x00, 0x8c, 0xbc, 0xd3, 0x0a, 0xf7, 0xe4, 0x58, 0x05, 0xb8, 0xb3, 0x45, 0x06,
-    0xd0, 0x2c, 0x1e, 0x8f, 0xca, 0x3f, 0x0f, 0x02, 0xc1, 0xaf, 0xbd, 0x03, 0x01, 0x13, 0x8a, 0x6b,
-    0x3a, 0x91, 0x11, 0x41, 0x4f, 0x67, 0xdc, 0xea, 0x97, 0xf2, 0xcf, 0xce, 0xf0, 0xb4, 0xe6, 0x73,
-    0x96, 0xac, 0x74, 0x22, 0xe7, 0xad, 0x35, 0x85, 0xe2, 0xf9, 0x37, 0xe8, 0x1c, 0x75, 0xdf, 0x6e,
-    0x47, 0xf1, 0x1a, 0x71, 0x1d, 0x29, 0xc5, 0x89, 0x6f, 0xb7, 0x62, 0x0e, 0xaa, 0x18, 0xbe, 0x1b,
-    0xfc, 0x56, 0x3e, 0x4b, 0xc6, 0xd2, 0x79, 0x20, 0x9a, 0xdb, 0xc0, 0xfe, 0x78, 0xcd, 0x5a, 0xf4,
-    0x1f, 0xdd, 0xa8, 0x33, 0x88, 0x07, 0xc7, 0x31, 0xb1, 0x12, 0x10, 0x59, 0x27, 0x80, 0xec, 0x5f,
-    0x60, 0x51, 0x7f, 0xa9, 0x19, 0xb5, 0x4a, 0x0d, 0x2d, 0xe5, 0x7a, 0x9f, 0x93, 0xc9, 0x9c, 0xef,
-    0xa0, 0xe0, 0x3b, 0x4d, 0xae, 0x2a, 0xf5, 0xb0, 0xc8, 0xeb, 0xbb, 0x3c, 0x83, 0x53, 0x99, 0x61,
-    0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d
-]
-
-# (Include S_BOX, RCON, xtime, key_expansion, sub_bytes, shift_rows, mix_columns, add_round_key from kdc.py)
-# Plus Inverse functions for decryption:
-def inv_sub_bytes(state):
-    for r in range(4):
-        for c in range(4):
-            state[r][c] = INV_S_BOX[state[r][c]]
-
-def inv_shift_rows(state):
-    state[1] = state[1][-1:] + state[1][:-1]
-    state[2] = state[2][-2:] + state[2][:-2]
-    state[3] = state[3][-3:] + state[3][:-3]
-
-def inv_mix_columns(state):
-    for c in range(4):
-        col = [state[r][c] for r in range(4)]
-        # Galois Field inverse multiplications
-        # Simplified for template:
-        # col_out = mix_columns_inv_matrix * col
-        pass # Add Galois field InvMixColumns or standard lookup
-
-# For brevity in template, using simplified decryption wrapper:
-def aes_decrypt(hex_ciphertext, key_str):
-    # Converts Hex back to bytes and applies inverse AES steps
-    # Returns stripped ASCII string
-    pass
-
-def aes_encrypt(plaintext_str, key_str):
-    # Same as kdc.py implementation
-    pass
-
-# --- BOB SERVER CONFIG ---
 BOB_HOST = "0.0.0.0"
 BOB_PORT = 8000
+
 KEY_B = "MasterKeyBob1234"
 SESSION_KEY_AB = None
 
-def start_bob():
-    global KEY_B, SESSION_KEY_AB
-    print("=== BOB READY FOR CONNECTION ===")
-    
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind((BOB_HOST, BOB_PORT))
-    server.listen(1)
-    
-    conn, addr = server.accept()
-    print(f"[+] Alice connected from {addr}")
-    
-    # Step 3: Receive Ticket_B + E(K_AB, N2)
-    data = conn.recv(2048).decode('ascii').strip()
-    ticket_b_hex, encrypted_n2_hex = data.split(";")
-    
-    # Decrypt Ticket_B using KEY_B
-    ticket_raw = aes_decrypt(ticket_b_hex, KEY_B)
-    SESSION_KEY_AB, id_a = ticket_raw.split(",")
-    print(f"[+] Decrypted Ticket_B! Session Key K_AB: {SESSION_KEY_AB}")
-    
-    # Decrypt N2 using SESSION_KEY_AB
-    n2_str = aes_decrypt(encrypted_n2_hex, SESSION_KEY_AB)
-    n2 = int(n2_str)
-    
-    # Step 4: Challenge Response f(N2) = N2 - 1
-    f_n2 = str(n2 - 1)
-    ans_hex = aes_encrypt(f_n2, SESSION_KEY_AB)
-    conn.send(ans_hex.encode('ascii'))
-    print("[+] Handshake Step 4 Complete! Direct encrypted chat active.\n")
-    
-    # Direct Chat Receiver Thread
-    def receive_chat():
-        while True:
+def handle_chat_session(conn, addr, kb):
+    global SESSION_KEY_AB
+    try:
+        conn_file = conn.makefile('r', encoding='ascii')
+        print(f"\n[+] Incoming connection from {addr}")
+        
+        # Step 3: Receive Ticket_B from Alice
+        print("[*] Waiting for Step 3 (Ticket_B) from Alice...")
+        line = conn_file.readline()
+        if not line:
+            conn.close()
+            return
+        ticket_b_hex = line.strip()
+        print(f"[Step 3 Received Ticket_B (Hex)]: {ticket_b_hex}")
+        
+        # Decrypt Ticket_B using Bob's Master Key (Kb)
+        try:
+            ticket_plain = aes_decrypt(ticket_b_hex, kb)
+        except Exception as e:
+            print(f"[-] Failed to decrypt Ticket_B with Master Key Kb: {e}")
+            conn.send(b"ERROR: Ticket decryption failed\n")
+            conn.close()
+            return
+            
+        print(f"[+] Decrypted Ticket_B: '{ticket_plain}'")
+        parts = ticket_plain.split(",")
+        if len(parts) != 2:
+            print(f"[-] Malformed Ticket_B content: {ticket_plain}")
+            conn.close()
+            return
+            
+        ks, id_a = parts[0].strip(), parts[1].strip()
+        SESSION_KEY_AB = ks
+        print(f"[+] Authenticated Client Identity: {id_a}")
+        print(f"[+] Extracted Session Key (Ks): {ks}")
+        
+        # Step 4: Generate Nonce N2 and send E(Ks, N2) to Alice
+        n2 = random.randint(100000, 999999)
+        print(f"[+] Generated Challenge Nonce (N2): {n2}")
+        
+        enc_n2_hex = aes_encrypt(str(n2), ks)
+        print(f"[Step 4 Sending to {id_a}] E(Ks, N2) (Hex): {enc_n2_hex}")
+        conn.send((enc_n2_hex + "\n").encode('ascii'))
+        
+        # Step 5: Receive E(Ks, f(N2)) from Alice
+        print("[*] Waiting for Step 5 from Alice...")
+        step5_line = conn_file.readline()
+        if not step5_line:
+            conn.close()
+            return
+        step5_hex = step5_line.strip()
+        print(f"[Step 5 Received] E(Ks, f(N2)) (Hex): {step5_hex}")
+        
+        try:
+            ans_plain = aes_decrypt(step5_hex, ks)
+            ans_n2 = int(ans_plain.strip())
+        except Exception as e:
+            print(f"[-] Failed to decrypt Step 5: {e}")
+            conn.send(b"ERROR: Step 5 failed\n")
+            conn.close()
+            return
+            
+        expected_fn2 = n2 - 1
+        print(f"[+] Decrypted f(N2): {ans_n2} (Expected: {expected_fn2})")
+        
+        if ans_n2 == expected_fn2:
+            print("\n=======================================================")
+            print(" [+] STEP 5 VERIFIED! Alice authenticated successfully.")
+            print(f" [+] Mutual Session Key: {ks}")
+            print(" [+] Two-Way Encrypted Chat is now ACTIVE!")
+            print("=======================================================")
+            
+            # Send confirmation to Alice
+            auth_ok_hex = aes_encrypt("AUTH_OK", ks)
+            conn.send((auth_ok_hex + "\n").encode('ascii'))
+        else:
+            print("[-] Nonce verification failed! Replay attack or impostor.")
+            conn.send(b"ERROR: Nonce mismatch\n")
+            conn.close()
+            return
+            
+        # --- TWO-WAY CHAT SESSION ---
+        chat_active = True
+        
+        def receive_chat():
+            nonlocal chat_active
+            while chat_active:
+                try:
+                    data = conn_file.readline()
+                    if not data:
+                        print(f"\n[Chat] {id_a} disconnected.")
+                        chat_active = False
+                        break
+                    data = data.strip()
+                    if not data:
+                        continue
+                    if data == "/exit":
+                        print(f"\n[Chat] {id_a} ended the chat.")
+                        chat_active = False
+                        break
+                        
+                    plain = aes_decrypt(data, ks)
+                    print(f"\n[{id_a}] Ciphertext (Hex): {data}")
+                    print(f"[{id_a}] Plaintext       : {plain}")
+                    print("Bob > ", end="", flush=True)
+                except Exception as e:
+                    if chat_active:
+                        print(f"\n[Chat] Receive/Decryption Error: {e}")
+                    chat_active = False
+                    break
+                    
+        recv_thread = threading.Thread(target=receive_chat, daemon=True)
+        recv_thread.start()
+        
+        print("\nType your message and press Enter. Commands: /info, /exit\n")
+        print("Bob > ", end="", flush=True)
+        while chat_active:
             try:
-                hex_msg = conn.recv(1024).decode('ascii').strip()
-                if not hex_msg: break
-                plain = aes_decrypt(hex_msg, SESSION_KEY_AB)
-                print(f"\n[Alice (Hex: {hex_msg[:8]}...)]: {plain}\nBob > ", end="")
-            except:
+                rlist, _, _ = select.select([sys.stdin], [], [], 0.5)
+                if not chat_active:
+                    break
+                if rlist:
+                    line = sys.stdin.readline()
+                    if not line:
+                        chat_active = False
+                        break
+                    msg = line.strip()
+                    if not msg:
+                        print("Bob > ", end="", flush=True)
+                        continue
+                    if msg.lower() == "/exit":
+                        try:
+                            conn.send(b"/exit\n")
+                        except:
+                            pass
+                        chat_active = False
+                        break
+                    elif msg.lower() == "/info":
+                        print(f"[Info] Active Partner: {id_a} | Session Key (Ks): {ks}")
+                        print("Bob > ", end="", flush=True)
+                        continue
+                        
+                    hex_ct = aes_encrypt(msg, ks)
+                    print(f"[Sent] Ciphertext (Hex): {hex_ct}")
+                    conn.send((hex_ct + "\n").encode('ascii'))
+                    print("Bob > ", end="", flush=True)
+            except (KeyboardInterrupt, EOFError):
+                try:
+                    conn.send(b"/exit\n")
+                except:
+                    pass
+                chat_active = False
                 break
                 
-    threading.Thread(target=receive_chat, daemon=True).start()
+    except Exception as e:
+        print(f"[-] Session error: {e}")
+    finally:
+        conn.close()
+        print("\n[+] Session closed. Returning to listening mode...\n")
+
+def run_bob():
+    global KEY_B, BOB_PORT
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     
-    # Chat Sender Loop
+    try:
+        server.bind((BOB_HOST, BOB_PORT))
+    except Exception as e:
+        print(f"[-] Could not bind to port {BOB_PORT}: {e}")
+        return
+        
+    server.listen(5)
+    print("==========================================")
+    print("               BOB NODE                   ")
+    print(f"   Listening on {BOB_HOST}:{BOB_PORT}     ")
+    print(f"   Current Master Key Bob (Kb): {KEY_B}  ")
+    print("==========================================")
+    print("[*] Ready and listening for incoming handshake from Alice...")
+    print("Commands: 'setkb <new_key>', 'keys', 'aes', 'exit'\n")
+    print("Bob > ", end="", flush=True)
+    
     while True:
-        msg = input("Bob > ")
-        if msg.lower() == 'exit': break
-        hex_out = aes_encrypt(msg, SESSION_KEY_AB)
-        conn.send(hex_out.encode('ascii'))
+        try:
+            rlist, _, _ = select.select([sys.stdin, server], [], [])
+            
+            if server in rlist:
+                conn, addr = server.accept()
+                handle_chat_session(conn, addr, KEY_B)
+                print("[*] Ready and listening for incoming handshake from Alice...")
+                print("Bob > ", end="", flush=True)
+                
+            if sys.stdin in rlist:
+                line = sys.stdin.readline()
+                if not line:
+                    break
+                cmd = line.strip()
+                if not cmd:
+                    print("Bob > ", end="", flush=True)
+                    continue
+                parts = cmd.split(maxsplit=1)
+                action = parts[0].lower()
+                
+                if action == "keys":
+                    print(f"[Bob] Master Key Bob (Kb): {KEY_B}")
+                elif action == "setkb":
+                    if len(parts) > 1 and parts[1].strip():
+                        KEY_B = parts[1].strip()
+                        print(f"[+] Master Key Bob updated to: {KEY_B}")
+                    else:
+                        new_k = input("Enter new Master Key for Bob: ").strip()
+                        if new_k:
+                            KEY_B = new_k
+                            print(f"[+] Master Key Bob updated to: {KEY_B}")
+                elif action == "aes":
+                    txt = input("Plaintext: ")
+                    c = aes_encrypt(txt, KEY_B)
+                    print(f"Ciphertext (Hex): {c}")
+                    print(f"Decrypted: {aes_decrypt(c, KEY_B)}")
+                elif action in ["exit", "quit"]:
+                    print("Exiting Bob node.")
+                    break
+                else:
+                    print(f"Unknown command: '{cmd}'. Commands: 'setkb <new_key>', 'keys', 'aes', 'exit'")
+                print("Bob > ", end="", flush=True)
+        except (KeyboardInterrupt, EOFError):
+            print("\nExiting Bob node.")
+            break
+            
+    server.close()
 
 if __name__ == "__main__":
-    start_bob()
+    run_bob()
