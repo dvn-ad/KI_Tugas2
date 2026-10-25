@@ -1,0 +1,44 @@
+version: '3.8'
+
+networks:
+  ki_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+services:
+  kdc:
+    build: .
+    container_name: kdc_node
+    command: python3 -u kdc.py
+    networks:
+      ki_network:
+        ipv4_address: 172.20.0.10
+    ports:
+      - "7000:7000"
+
+  bob:
+    build: .
+    container_name: bob_node
+    command: python3 -u bob.py
+    networks:
+      ki_network:
+        ipv4_address: 172.20.0.12
+    ports:
+      - "8000:8000"
+    depends_on:
+      - kdc
+
+  alice:
+    build: .
+    container_name: alice_node
+    command: python3 -u alice.py
+    stdin_open: true # Keeps stdin open for interactive CLI
+    tty: true        # Allocates pseudo-TTY for input
+    networks:
+      ki_network:
+        ipv4_address: 172.20.0.11
+    depends_on:
+      - kdc
+      - bob
